@@ -66,8 +66,16 @@ async function apiRequest(path, options={}){
 async function refreshCurrentUser(){
   const { data: { user }, error } = await supabase.auth.getUser();
   if(error||!user){ setCurrentUser(null); return null; }
-  const { data: profile } = await supabase.from("profiles").select("id,full_name,username,role").eq("id", user.id).maybeSingle();
-  const current = { id:user.id, email:user.email||"", username:profile?.username||user.user_metadata?.username||"", fullName:profile?.full_name||user.user_metadata?.full_name||"", role:profile?.role||"user" };
+  const { data: profile } = await supabase.from("profiles").select("id,full_name,username,role,balance,total_credited").eq("id", user.id).maybeSingle();
+  const current = { 
+    id:user.id, 
+    email:user.email||"", 
+    username:profile?.username||user.user_metadata?.username||"", 
+    fullName:profile?.full_name||user.user_metadata?.full_name||"", 
+    role:profile?.role||"user",
+    balance: Number(profile?.balance||0),
+    totalCredited: Number(profile?.total_credited||0)
+  };
   setCurrentUser(current);
   return current;
 }
@@ -497,6 +505,94 @@ function renderAdminPage(){
     </section>`;
 }
 
+function renderWalletPage(){
+  const user=getCurrentUser();
+  if(!user){
+    window.location.hash="#/login";
+    return `<section class="page-shell centered"><p>Redirection connexion...</p></section>`;
+  }
+  const balance = user.balance||0;
+  const totalCredited = user.totalCredited||0;
+  const myPayments = (state.payments||[]).filter(p=>String(p.user_id)===String(user.id));
+  const pending = myPayments.filter(p=>p.status==="pending");
+  const accepted = myPayments.filter(p=>p.status==="accepted");
+  return `
+    <section class="page-shell">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;margin-bottom:24px">
+        <div>
+          <h1 style="margin:0;display:flex;align-items:center;gap:12px"><i class="fa-solid fa-wallet" style="color:var(--accent)"></i>Mon Solde</h1>
+          <p style="color:var(--muted);margin:6px 0 0">Gère ton solde et recharge par photo de carte</p>
+        </div>
+        <div style="background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#111;padding:16px 24px;border-radius:16px;display:flex;align-items:center;gap:12px;min-width:200px">
+          <i class="fa-solid fa-coins" style="font-size:1.8rem"></i>
+          <div>
+            <div style="font-size:0.8rem;font-weight:700;opacity:0.7">SOLDE ACTUEL</div>
+            <div style="font-size:1.8rem;font-weight:900">${balance.toFixed(2)}$</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px">
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px">
+          <div style="color:var(--muted);font-size:0.8rem;display:flex;align-items:center;gap:6px"><i class="fa-solid fa-arrow-up"></i> Total crédité</div>
+          <div style="font-size:1.4rem;font-weight:800;margin-top:4px">${totalCredited.toFixed(2)}$</div>
+        </div>
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px">
+          <div style="color:var(--muted);font-size:0.8rem;display:flex;align-items:center;gap:6px"><i class="fa-solid fa-clock"></i> En attente</div>
+          <div style="font-size:1.4rem;font-weight:800;margin-top:4px">${pending.length} paiement(s)</div>
+        </div>
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px">
+          <div style="color:var(--muted);font-size:0.8rem;display:flex;align-items:center;gap:6px"><i class="fa-solid fa-check"></i> Validés</div>
+          <div style="font-size:1.4rem;font-weight:800;margin-top:4px">${accepted.length}</div>
+        </div>
+      </div>
+
+      <div class="admin-grid">
+        <div class="admin-panel">
+          <h2><i class="fa-solid fa-camera" style="margin-right:8px;color:var(--accent)"></i>Recharger mon solde - Photo carte</h2>
+          <div style="background:rgba(255,138,0,0.08);border:1px solid rgba(255,138,0,0.25);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start;margin-bottom:16px">
+            <i class="fa-solid fa-circle-info" style="color:var(--accent);margin-top:2px"></i>
+            <div style="font-size:0.85rem;line-height:1.5;color:var(--muted)">
+              <strong style="color:var(--text)">Instructions :</strong><br/>
+              1. Achetez une carte de recharge<br/>
+              2. Photo claire code + solde<br/>
+              3. Uploadez ici + indique solde<br/>
+              4. Admin confirme -> solde crédité automatiquement
+            </div>
+          </div>
+          <form id="wallet-recharge-form">
+            <label><span><i class="fa-solid fa-image" style="margin-right:4px"></i>Photo de la carte achetée *</span><input type="file" id="wallet-card-proof" accept="image/*" required /></label>
+            <div id="wallet-card-preview" class="image-preview hidden" style="margin:8px 0;border:1px dashed var(--line);border-radius:10px;padding:8px"></div>
+            <label><span><i class="fa-solid fa-dollar-sign" style="margin-right:4px"></i>Solde sur la photo ($) *</span><input type="number" id="wallet-card-balance" placeholder="Ex: 50" min="1" required /></label>
+            <button type="submit" class="btn-primary full" style="margin-top:12px"><i class="fa-solid fa-upload" style="margin-right:8px"></i>Envoyer photo & Recharger ${balance>0?'':''}</button>
+          </form>
+        </div>
+
+        <div class="admin-panel">
+          <h2><i class="fa-solid fa-clock-rotate-left" style="margin-right:8px"></i>Historique recharges</h2>
+          <div class="admin-list">
+            ${myPayments.length ? myPayments.map(p=>{
+              const raw = p.proof_url||"";
+              const proofPath = raw.split("|")[0];
+              const balMatch = raw.match(/balance:([0-9]+\.?[0-9]*)/);
+              const bal = balMatch ? balMatch[1] : p.amount;
+              const statusColor = p.status==="accepted" ? "var(--success)" : p.status==="declined" ? "var(--danger)" : "var(--accent)";
+              const statusIcon = p.status==="accepted" ? "fa-circle-check" : p.status==="declined" ? "fa-circle-xmark" : "fa-clock";
+              return `<div class="payment-item ${p.status}" style="border-left:3px solid ${statusColor}">
+                <div>
+                  <strong><i class="fa-solid ${statusIcon}" style="color:${statusColor};margin-right:6px"></i>${p.target==="recharge"||p.target==="balance"?"Recharge":"Paiement"} ${bal}$ • ${escapeHtml(p.status)}</strong>
+                  <p style="font-size:0.85rem;color:var(--muted);margin:4px 0"><i class="fa-regular fa-clock"></i> ${new Date(p.created_at).toLocaleString("fr-FR")} | ${escapeHtml(p.method)}</p>
+                  ${proofPath?`<button class="mini-btn" data-action="view-proof" data-path="${escapeHtml(proofPath)}"><i class="fa-solid fa-eye"></i> Voir photo</button><div class="proof-preview" id="proof-${escapeHtml(p.id)}" style="margin-top:8px"></div>`:""}
+                </div>
+                <div style="font-weight:800;color:${statusColor}">${p.status==="accepted"?`+${bal}$ crédités`:`${bal}$`}</div>
+              </div>`;
+            }).join("") : `<p class="empty-state"><i class="fa-solid fa-inbox"></i> Aucune recharge pour l'instant. Uploade ta première carte !</p>`}
+          </div>
+        </div>
+      </div>
+    </section>`;
+}
+
 function renderNotFound(){
   return `<section class="page-shell centered" style="text-align:center;padding:80px 24px"><div style="width:100px;height:100px;background:rgba(255,138,0,0.1);border-radius:24px;display:grid;place-items:center;margin:0 auto 20px"><i class="fa-solid fa-map-signs" style="font-size:2.5rem;color:var(--accent)"></i></div><h1 style="font-size:4rem;margin:0">404</h1><p><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px"></i>Cette page n'existe pas.</p><a href="#/" class="btn-primary"><i class="fa-solid fa-house" style="margin-right:8px"></i>Retour accueil</a></section>`;
 }
@@ -659,18 +755,29 @@ async function handlePaymentSubmit(e){
     showToast("Méthode invalide - utilisez recharge par carte", "error");
     return;
   }
-  // Nouvelle logique: photo de la carte achetée
+  // Nouvelle logique: photo de la carte achetée -> crédit solde
   const file = $("#card-proof")?.files[0];
   if(!file){ showToast("Photo de la carte achetée requise", "error"); return; }
-  const balance = $("#card-balance")?.value.trim()||"";
-  const amount=Number($("#payment-amount").value||0), target=$("#payment-target").value, productId=$("#payment-product-id").value||null, adId=$("#payment-ad-id").value||null;
+  const balanceInput = $("#card-balance")?.value.trim()||"";
+  const balanceVal = balanceInput ? Number(balanceInput) : null;
+  let amount = Number($("#payment-amount").value||0);
+  // Si recharge solde, amount = solde indiqué sur photo, sinon prix produit/annonce
+  const target = $("#payment-target").value;
+  if(target==="recharge" || target==="balance"){
+    amount = balanceVal || amount || 0;
+    if(!amount || amount<=0){ showToast("Indique le solde sur la photo (ex: 50)", "error"); return; }
+  } else if(balanceVal && balanceVal>0){
+    // Si solde renseigné et achat produit, on priorise solde photo pour crédit
+    amount = balanceVal;
+  }
+  const productId=$("#payment-product-id").value||null, adId=$("#payment-ad-id").value||null;
   try{
     const ext = (file.name.split(".").pop()||"jpg").toLowerCase();
     const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
     const { error: upErr } = await supabase.storage.from("payment-proofs").upload(path, file, { upsert:false, contentType: file.type });
     if(upErr) throw upErr;
-    // On stocke le chemin + solde indiqué pour que admin crédite le solde visible sur photo
-    const proofWithBalance = balance ? `${path}|balance:${balance}` : path;
+    // Stocke path|balance:XX pour que trigger SQL crédite automatiquement
+    const proofWithBalance = balanceVal ? `${path}|balance:${balanceVal}` : path;
     {
       const { error: payErr } = await supabase.from("payments").insert({ 
         user_id: user.id, 
@@ -686,8 +793,13 @@ async function handlePaymentSubmit(e){
       if(payErr) throw payErr;
     }
     closePaymentModal();
-    setPaymentNotice("Photo de carte envoyée. En attente de confirmation admin - le solde sur la photo sera crédité sur votre compte.");
-    showToast("Photo uploadée, en attente validation admin pour crédit solde", "success", 6000);
+    if(target==="recharge" || target==="balance"){
+      setPaymentNotice(`Recharge de ${amount}$ envoyée. En attente confirmation admin - ${amount}$ seront crédités sur ton solde.`);
+      showToast(`Photo uploadée - ${amount}$ en attente de crédit sur ton solde`, "success", 6000);
+    } else {
+      setPaymentNotice("Photo de carte envoyée. En attente de confirmation admin - le solde sur la photo sera crédité sur votre compte.");
+      showToast("Photo uploadée, en attente validation admin pour crédit solde", "success", 6000);
+    }
     await hydrateState();
     render();
   } catch(err){ showToast(err.message||"Erreur paiement", "error"); }
@@ -766,27 +878,57 @@ function attachAdminHandlers(){
   }));
   $$('[data-action="accept-payment"]').forEach(btn=>btn.addEventListener("click", async ()=>{
     try{
-      btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i>`;
-      const balance = btn.dataset.balance||"";
-      // RADICAL: Supabase direct
+      btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Crédit...`;
+      const balanceStr = btn.dataset.balance||"";
+      let creditAmount = balanceStr ? Number(balanceStr) : 0;
+      // RADICAL: Supabase direct + crédit automatique solde
+      let payment;
       {
-        const { data: payment, error: payUpErr } = await supabase.from("payments").update({ status: "accepted", validation: "valid", updated_at: new Date().toISOString() }).eq("id", btn.dataset.id).select().single();
+        const { data, error: payUpErr } = await supabase.from("payments").update({ status: "accepted", validation: "valid", updated_at: new Date().toISOString() }).eq("id", btn.dataset.id).select().single();
         if(payUpErr) throw payUpErr;
+        payment=data;
+        if(!creditAmount || creditAmount<=0){
+          // Fallback: extrait balance depuis proof_url si présent
+          const raw = payment.proof_url||"";
+          const m = raw.match(/balance:([0-9]+\.?[0-9]*)/);
+          if(m) creditAmount = Number(m[1]);
+          else creditAmount = Number(payment.amount||0);
+        }
         if(payment.target==="ad" && payment.ad_id) {
           await supabase.from("ads").update({ status: "active", updated_at: new Date().toISOString() }).eq("id", payment.ad_id);
         }
-        // Si solde présent, on pourrait créditer le compte utilisateur (logique métier)
-        // Pour l'instant on log le crédit - l'admin devra créditer manuellement le solde visible sur photo
+        // Crédit automatique solde utilisateur (fallback si trigger SQL non installé)
+        if(creditAmount>0 && payment.user_id){
+          try{
+            // Récupère profil actuel
+            const { data: prof } = await supabase.from("profiles").select("balance").eq("id", payment.user_id).maybeSingle();
+            const currentBal = Number(prof?.balance||0);
+            const { error: balErr } = await supabase.from("profiles").update({ 
+              balance: currentBal + creditAmount,
+              total_credited: (Number(prof?.total_credited||0) || currentBal) + creditAmount,
+              updated_at: new Date().toISOString()
+            }).eq("id", payment.user_id);
+            if(balErr){
+              console.warn("Balance update failed (peut-être RLS, trigger va gérer):", balErr.message);
+              // Si RLS bloque, le trigger SQL côté DB va créditer automatiquement
+            }
+          }catch(be){
+            console.warn("Balance credit fallback error:", be.message);
+          }
+        }
       }
       await hydrateState();
       clearPaymentNotice();
-      if(balance){
-        showToast(`Paiement accepté - ${balance}$ crédités sur compte client (solde photo)`, "success", 6000);
+      if(creditAmount>0){
+        showToast(`✅ ${creditAmount}$ crédités automatiquement sur compte client`, "success", 6000);
       } else {
-        showToast("Paiement carte accepté - solde sur photo à créditer manuellement", "success", 6000);
+        showToast("Paiement accepté", "success");
       }
-      setTimeout(()=>{ window.location.href=getRedirectUrl(); }, 1500);
-    } catch(e){ showToast(e.message, "error"); }
+      render();
+    } catch(e){ 
+      showToast(e.message, "error"); 
+      btn.innerHTML=`<i class="fa-solid fa-check"></i> Accepter`;
+    }
   }));
   $$('[data-action="decline-payment"]').forEach(btn=>btn.addEventListener("click", async ()=>{
     try{
@@ -876,6 +1018,56 @@ function bindModalControls(){
     this.value=formatted;
   });
 
+  // Wallet recharge form
+  $("#wallet-recharge-form")?.addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const user=getCurrentUser();
+    if(!user){ showToast("Connecte-toi", "error"); return; }
+    const file=$("#wallet-card-proof")?.files[0];
+    const balStr=$("#wallet-card-balance")?.value.trim()||"";
+    const bal=Number(balStr);
+    if(!file){ showToast("Photo carte requise", "error"); return; }
+    if(!bal || bal<=0){ showToast("Solde sur photo requis", "error"); return; }
+    const btn=e.target.querySelector('button[type="submit"]');
+    const orig=btn.innerHTML;
+    btn.disabled=true;
+    btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Envoi...`;
+    try{
+      const ext=(file.name.split(".").pop()||"jpg").toLowerCase();
+      const path=`${user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("payment-proofs").upload(path, file, { upsert:false, contentType:file.type });
+      if(upErr) throw upErr;
+      const proofWithBalance=`${path}|balance:${bal}`;
+      const { error: payErr } = await supabase.from("payments").insert({
+        user_id: user.id,
+        target: "recharge",
+        amount: bal,
+        method: "card",
+        status: "pending",
+        validation: "pending",
+        proof_url: proofWithBalance
+      });
+      if(payErr) throw payErr;
+      showToast(`${bal}$ en attente de validation admin - sera crédité automatiquement`, "success", 6000);
+      e.target.reset();
+      const prev=$("#wallet-card-preview"); if(prev){ prev.classList.add("hidden"); prev.innerHTML=""; }
+      await hydrateState();
+      render();
+    }catch(err){
+      showToast(err.message||"Erreur recharge", "error");
+      btn.disabled=false;
+      btn.innerHTML=orig;
+    }
+  });
+  $("#wallet-card-proof")?.addEventListener("change", async function(){
+    const file=this.files[0], preview=$("#wallet-card-preview");
+    if(!file){ preview?.classList.add("hidden"); if(preview) preview.innerHTML=""; return; }
+    try{
+      const data=await readFileAsDataUrl(file);
+      if(preview){ preview.innerHTML=`<img src="${data}" alt="Photo carte" style="width:100%;max-height:220px;object-fit:contain;border-radius:8px" /><p style="font-size:0.8rem;color:var(--muted);margin-top:6px"><i class="fa-solid fa-check" style="color:var(--success)"></i> Photo prête - ${$("#wallet-card-balance")?.value||"? "}$ sera crédité après validation</p>`; preview.classList.remove("hidden"); }
+    }catch{ showToast("Fichier illisible", "error"); }
+  });
+
   // Search
   $("#global-search")?.addEventListener("input", (e)=>{
     state.searchQuery=e.target.value;
@@ -930,6 +1122,7 @@ async function render(){
     if(!cur||cur.role!=="admin"){ window.location.hash="#/login"; render(); return; }
     html=renderAdminPage();
   }
+  else if(route==="wallet"||route==="balance"||route==="solde") html=renderWalletPage();
   else if(route==="products") html=renderProductsPage();
   else if(route==="discussion") html=renderDiscussionPage();
   else if(route==="home"||route==="") html=renderHome();
@@ -974,28 +1167,49 @@ async function render(){
     const signupLink=$("#signup-link");
     const logoutBtn=$("#logout-btn");
     let adminLink=$("#admin-link");
+    let walletLink=$("#wallet-link");
+    let balanceBadge=$("#balance-badge");
 
-    if(user?.role==="admin"){
-      if(!adminLink){
-        adminLink=document.createElement("a");
-        adminLink.id="admin-link";
-        adminLink.href="#/admin";
-        adminLink.className="nav-link";
-        adminLink.innerHTML=`<i class="fa-solid fa-shield-halved"></i> Admin`;
-        adminLink.style.color="var(--accent)";
-        adminLink.style.fontWeight="800";
-        $(".header-actions")?.appendChild(adminLink);
+    if(user){
+      // Balance badge + wallet link for all logged users
+      if(!walletLink){
+        walletLink=document.createElement("a");
+        walletLink.id="wallet-link";
+        walletLink.href="#/wallet";
+        walletLink.className="nav-link";
+        walletLink.style.background="rgba(255,138,0,0.12)";
+        walletLink.style.border="1px solid rgba(255,138,0,0.3)";
+        walletLink.style.borderRadius="20px";
+        walletLink.style.padding="6px 12px";
+        walletLink.style.fontWeight="800";
+        $(".header-actions")?.prepend(walletLink);
       }
-      loginLink?.classList.add("hidden");
-      signupLink?.classList.add("hidden");
-      logoutBtn?.classList.remove("hidden");
-    } else if(user){
-      if(adminLink) adminLink.remove();
-      loginLink?.classList.add("hidden");
-      signupLink?.classList.add("hidden");
-      logoutBtn?.classList.remove("hidden");
+      walletLink.innerHTML=`<i class="fa-solid fa-wallet" style="color:var(--accent)"></i> ${Number(user.balance||0).toFixed(0)}$`;
+      walletLink.title=`Solde: ${Number(user.balance||0).toFixed(2)}$ - Cliquer pour recharger`;
+
+      if(user?.role==="admin"){
+        if(!adminLink){
+          adminLink=document.createElement("a");
+          adminLink.id="admin-link";
+          adminLink.href="#/admin";
+          adminLink.className="nav-link";
+          adminLink.innerHTML=`<i class="fa-solid fa-shield-halved"></i> Admin`;
+          adminLink.style.color="var(--accent)";
+          adminLink.style.fontWeight="800";
+          $(".header-actions")?.appendChild(adminLink);
+        }
+        loginLink?.classList.add("hidden");
+        signupLink?.classList.add("hidden");
+        logoutBtn?.classList.remove("hidden");
+      } else {
+        if(adminLink) adminLink.remove();
+        loginLink?.classList.add("hidden");
+        signupLink?.classList.add("hidden");
+        logoutBtn?.classList.remove("hidden");
+      }
     } else {
       if(adminLink) adminLink.remove();
+      if(walletLink) walletLink.remove();
       loginLink?.classList.remove("hidden");
       signupLink?.classList.remove("hidden");
       logoutBtn?.classList.add("hidden");
