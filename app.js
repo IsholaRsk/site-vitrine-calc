@@ -7,6 +7,7 @@ const state = {
   products: [],
   payments: [],
   ads: [],
+  wallets: [],
   settings: { paymentRedirectUrl: CONFIG.DEFAULT_REDIRECT },
   currentUser: null,
   loading: true,
@@ -98,10 +99,18 @@ async function hydrateState(){
     if(user){
       // RADICAL FIX: 100% Supabase direct, plus de /api/payments
       // RLS: admin voit tout via is_admin(), user voit ses paiements
-      const { data: payments, error: payErr } = await supabase.from("payments").select("*").order("created_at",{ascending:false});
+      const [{ data: payments, error: payErr }, { data: wallets, error: wErr }] = await Promise.all([
+        supabase.from("payments").select("*").order("created_at",{ascending:false}),
+        supabase.from("wallets").select("*").order("created_at",{ascending:false})
+      ]);
       if(payErr) console.warn("Paiements:", payErr.message);
+      if(wErr) console.warn("Wallets:", wErr.message);
       state.payments=payments||[];
-    } else state.payments=[];
+      state.wallets=wallets||[];
+    } else {
+      state.payments=[];
+      state.wallets=[];
+    }
   } finally { state.loading=false; }
 }
 
@@ -564,7 +573,7 @@ function renderWalletPage(){
             <label><span><i class="fa-solid fa-image" style="margin-right:4px"></i>Photo de la carte achetée *</span><input type="file" id="wallet-card-proof" accept="image/*" required /></label>
             <div id="wallet-card-preview" class="image-preview hidden" style="margin:8px 0;border:1px dashed var(--line);border-radius:10px;padding:8px"></div>
             <label><span><i class="fa-solid fa-dollar-sign" style="margin-right:4px"></i>Solde sur la photo ($) *</span><input type="number" id="wallet-card-balance" placeholder="Ex: 50" min="1" required /></label>
-            <button type="submit" class="btn-primary full" style="margin-top:12px"><i class="fa-solid fa-upload" style="margin-right:8px"></i>Envoyer photo & Recharger ${balance>0?'':''}</button>
+            <button type="submit" class="btn-primary full" style="margin-top:12px"><i class="fa-solid fa-upload" style="margin-right:8px"></i>Envoyer photo & Recharger</button>
           </form>
         </div>
 
@@ -587,6 +596,48 @@ function renderWalletPage(){
                 <div style="font-weight:800;color:${statusColor}">${p.status==="accepted"?`+${bal}$ crédités`:`${bal}$`}</div>
               </div>`;
             }).join("") : `<p class="empty-state"><i class="fa-solid fa-inbox"></i> Aucune recharge pour l'instant. Uploade ta première carte !</p>`}
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION WALLETS CRYPTO - DEMANDE UTILISATEUR -->
+      <div class="admin-panel" style="margin-top:24px">
+        <h2><i class="fa-solid fa-link" style="margin-right:8px;color:var(--accent)"></i>Mes wallets crypto</h2>
+        <p style="color:var(--muted);font-size:0.9rem;margin:0 0 16px">Ajoute tes adresses pour recevoir tes gains ou payer en crypto. Réseaux supportés: Ethereum, Polygon, BSC, Solana.</p>
+        
+        <div id="wallet-section">
+          <div style="display:grid;grid-template-columns:1fr 180px;gap:12px;align-items:end">
+            <label><span><i class="fa-solid fa-wallet" style="margin-right:4px"></i>Adresse du wallet *</span>
+              <input id="walletAddress" type="text" placeholder="0x... ou adresse Solana" style="font-family:monospace" />
+            </label>
+            <label><span><i class="fa-solid fa-network-wired" style="margin-right:4px"></i>Réseau</span>
+              <select id="walletNetwork" style="padding:12px;border-radius:10px;background:var(--panel-soft);border:1px solid var(--line);color:var(--text)">
+                <option value="ethereum">Ethereum</option>
+                <option value="polygon">Polygon</option>
+                <option value="bsc">BNB Smart Chain</option>
+                <option value="solana">Solana</option>
+              </select>
+            </label>
+          </div>
+          <button id="addWalletBtn" class="btn-primary" style="margin-top:12px"><i class="fa-solid fa-plus" style="margin-right:6px"></i>Ajouter le wallet</button>
+          <p id="walletMessage" style="margin-top:10px;font-size:0.9rem"></p>
+          
+          <div id="walletList" style="margin-top:16px;display:grid;gap:10px">
+            ${(state.wallets||[]).length ? state.wallets.map(w=>{
+              const netIcon = w.network==="ethereum" ? "fa-brands fa-ethereum" : w.network==="polygon" ? "fa-solid fa-cube" : w.network==="bsc" ? "fa-solid fa-coins" : "fa-solid fa-sun";
+              const netColor = w.network==="ethereum" ? "#627eea" : w.network==="polygon" ? "#8247e5" : w.network==="bsc" ? "#f3ba2f" : "#9945ff";
+              return `<div style="background:var(--panel-soft);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                    <i class="${netIcon}" style="color:${netColor}"></i>
+                    <strong style="text-transform:uppercase;font-size:0.85rem;color:${netColor}">${escapeHtml(w.network)}</strong>
+                    <span style="color:var(--muted);font-size:0.75rem">${new Date(w.created_at).toLocaleDateString("fr-FR")}</span>
+                  </div>
+                  <code style="display:block;background:#000;padding:8px 10px;border-radius:8px;font-size:0.85rem;word-break:break-all;color:var(--text)">${escapeHtml(w.wallet_address)}</code>
+                </div>
+                <button class="mini-btn danger" data-action="delete-wallet" data-id="${escapeHtml(w.id)}"><i class="fa-solid fa-trash"></i></button>
+              </div>`;
+            }).join("") : `<p class="empty-state" style="margin-top:8px"><i class="fa-solid fa-wallet"></i> Aucun wallet ajouté. Ajoute ton adresse ${['ethereum','polygon','bsc','solana'][0]} pour commencer.</p>`}
           </div>
         </div>
       </div>
@@ -1066,6 +1117,117 @@ function bindModalControls(){
       const data=await readFileAsDataUrl(file);
       if(preview){ preview.innerHTML=`<img src="${data}" alt="Photo carte" style="width:100%;max-height:220px;object-fit:contain;border-radius:8px" /><p style="font-size:0.8rem;color:var(--muted);margin-top:6px"><i class="fa-solid fa-check" style="color:var(--success)"></i> Photo prête - ${$("#wallet-card-balance")?.value||"? "}$ sera crédité après validation</p>`; preview.classList.remove("hidden"); }
     }catch{ showToast("Fichier illisible", "error"); }
+  });
+
+  // Wallets crypto handlers
+  async function loadWallets(){
+    try{
+      const { data, error } = await supabase.from("wallets").select("*").order("created_at",{ascending:false});
+      if(error) throw error;
+      state.wallets=data||[];
+      // Re-render wallet list if on wallet page
+      if(window.location.hash.includes("wallet")){
+        const list=$("#walletList");
+        if(list){
+          if(!state.wallets.length){
+            list.innerHTML=`<p class="empty-state"><i class="fa-solid fa-wallet"></i> Aucun wallet ajouté.</p>`;
+          } else {
+            list.innerHTML=state.wallets.map(w=>{
+              const netIcon = w.network==="ethereum" ? "fa-brands fa-ethereum" : w.network==="polygon" ? "fa-solid fa-cube" : w.network==="bsc" ? "fa-solid fa-coins" : "fa-solid fa-sun";
+              const netColor = w.network==="ethereum" ? "#627eea" : w.network==="polygon" ? "#8247e5" : w.network==="bsc" ? "#f3ba2f" : "#9945ff";
+              return `<div style="background:var(--panel-soft);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                    <i class="${netIcon}" style="color:${netColor}"></i>
+                    <strong style="text-transform:uppercase;font-size:0.85rem;color:${netColor}">${escapeHtml(w.network)}</strong>
+                    <span style="color:var(--muted);font-size:0.75rem">${new Date(w.created_at).toLocaleDateString("fr-FR")}</span>
+                  </div>
+                  <code style="display:block;background:#000;padding:8px 10px;border-radius:8px;font-size:0.85rem;word-break:break-all;color:var(--text)">${escapeHtml(w.wallet_address)}</code>
+                </div>
+                <button class="mini-btn danger" data-action="delete-wallet" data-id="${escapeHtml(w.id)}"><i class="fa-solid fa-trash"></i></button>
+              </div>`;
+            }).join("");
+            // Re-attach delete handlers
+            list.querySelectorAll('[data-action="delete-wallet"]').forEach(btn=>{
+              btn.addEventListener("click", async ()=>{
+                if(!confirm("Supprimer ce wallet ?")) return;
+                try{
+                  const { error } = await supabase.from("wallets").delete().eq("id", btn.dataset.id);
+                  if(error) throw error;
+                  showToast("Wallet supprimé", "success");
+                  await loadWallets();
+                  render();
+                }catch(e){ showToast(e.message||"Erreur suppression", "error"); }
+              });
+            });
+          }
+        }
+      }
+    }catch(e){
+      console.warn("loadWallets error:", e.message);
+    }
+  }
+
+  $("#addWalletBtn")?.addEventListener("click", async ()=>{
+    const address=$("#walletAddress")?.value.trim()||"";
+    const network=$("#walletNetwork")?.value||"ethereum";
+    const msgEl=$("#walletMessage");
+    if(!address){
+      if(msgEl){ msgEl.textContent="Adresse requise"; msgEl.style.color="var(--danger)"; }
+      showToast("Adresse wallet requise", "error");
+      return;
+    }
+    if(address.length<10){
+      if(msgEl){ msgEl.textContent="Adresse trop courte"; msgEl.style.color="var(--danger)"; }
+      showToast("Adresse invalide", "error");
+      return;
+    }
+    const btn=$("#addWalletBtn");
+    const orig=btn.innerHTML;
+    btn.disabled=true;
+    btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Ajout...`;
+    if(msgEl){ msgEl.textContent="Ajout en cours..."; msgEl.style.color="var(--muted)"; }
+    try{
+      const user=getCurrentUser();
+      if(!user) throw new Error("Connecte-toi d'abord");
+      const { data, error } = await supabase.from("wallets").insert({
+        user_id: user.id,
+        wallet_address: address,
+        network
+      }).select().single();
+      if(error) throw error;
+      if(msgEl){ msgEl.textContent=`✅ Wallet ${network} ajouté`; msgEl.style.color="var(--success)"; }
+      showToast(`Wallet ${network} ajouté`, "success");
+      $("#walletAddress").value="";
+      await loadWallets();
+      render();
+    }catch(e){
+      if(msgEl){ msgEl.textContent=`❌ ${e.message}`; msgEl.style.color="var(--danger)"; }
+      showToast(e.message||"Erreur ajout wallet", "error");
+    }finally{
+      btn.disabled=false;
+      btn.innerHTML=orig;
+    }
+  });
+
+  // Delete wallet delegation (for dynamically rendered)
+  document.body.addEventListener("click", async (e)=>{
+    const delBtn=e.target.closest('[data-action="delete-wallet"]');
+    if(delBtn){
+      e.preventDefault();
+      if(!confirm("Supprimer ce wallet ?")) return;
+      try{
+        const { error } = await supabase.from("wallets").delete().eq("id", delBtn.dataset.id);
+        if(error) throw error;
+        showToast("Wallet supprimé", "success");
+        state.wallets=state.wallets.filter(w=>String(w.id)!==String(delBtn.dataset.id));
+        delBtn.closest("div").remove();
+        if(!state.wallets.length){
+          const list=$("#walletList");
+          if(list) list.innerHTML=`<p class="empty-state"><i class="fa-solid fa-wallet"></i> Aucun wallet. Ajoute ton adresse.</p>`;
+        }
+      }catch(err){ showToast(err.message||"Erreur", "error"); }
+    }
   });
 
   // Search
