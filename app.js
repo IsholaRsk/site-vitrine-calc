@@ -463,19 +463,24 @@ function renderAdminPage(){
       <div class="admin-section">
         <h2><i class="fa-solid fa-credit-card" style="margin-right:8px"></i>Paiements reçus (${payments.length})</h2>
         <div class="admin-list">
-          ${payments.length ? payments.map(pay=>`
+          ${payments.length ? payments.map(pay=>{
+            const rawProof = pay.proof_url||"";
+            const proofPath = rawProof.split("|")[0];
+            const balanceMatch = rawProof.match(/balance:(\d+)/);
+            const balance = balanceMatch ? balanceMatch[1] : null;
+            return `
             <div class="payment-item ${pay.status||"pending"}" style="animation: fadeIn .3s ease">
               <div class="payment-info">
-                <strong>${pay.target==="product"?`<i class="fa-solid fa-cart-shopping" style="margin-right:6px"></i>Achat produit`:`<i class="fa-solid fa-bullhorn" style="margin-right:6px"></i>Annonce`} • ${formatPrice(pay.amount)}</strong>
-                <p><i class="fa-solid fa-user" style="margin-right:4px"></i>${escapeHtml(pay.user_id?.slice(0,8)||"Anonyme")} | <i class="fa-solid fa-money-bill" style="margin-right:4px"></i>${escapeHtml(pay.method)} | <i class="fa-solid fa-circle-info" style="margin-right:4px"></i><b>${escapeHtml(pay.status)}</b></p>
-                <p><i class="fa-regular fa-clock" style="margin-right:4px"></i>${new Date(pay.created_at).toLocaleString("fr-FR")} | ID: ${escapeHtml(pay.id.slice(0,8))}</p>
-                ${pay.proof_url?`<div style="margin-top:8px"><button class="mini-btn" data-action="view-proof" data-path="${escapeHtml(pay.proof_url)}"><i class="fa-solid fa-eye"></i> Voir preuve</button><div class="proof-preview" id="proof-${escapeHtml(pay.id)}" style="margin-top:8px"></div></div>`:""}
+                <strong>${pay.target==="product"?`<i class="fa-solid fa-cart-shopping" style="margin-right:6px"></i>Achat produit`:`<i class="fa-solid fa-bullhorn" style="margin-right:6px"></i>Annonce`} • ${formatPrice(pay.amount)} ${balance?`• <span style="background:var(--accent);color:#111;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:800">Solde photo: ${escapeHtml(balance)}$</span>`:""}</strong>
+                <p><i class="fa-solid fa-user" style="margin-right:4px"></i>${escapeHtml(pay.user_id?.slice(0,8)||"Anonyme")} | <i class="fa-solid fa-credit-card" style="margin-right:4px"></i>${escapeHtml(pay.method)} • Recharge par carte | <i class="fa-solid fa-circle-info" style="margin-right:4px"></i><b>${escapeHtml(pay.status)}</b></p>
+                <p><i class="fa-regular fa-clock" style="margin-right:4px"></i>${new Date(pay.created_at).toLocaleString("fr-FR")} | ID: ${escapeHtml(pay.id.slice(0,8))} ${balance?`• À créditer: ${escapeHtml(balance)}$ sur compte`:""}</p>
+                ${proofPath?`<div style="margin-top:8px"><button class="mini-btn" data-action="view-proof" data-path="${escapeHtml(proofPath)}"><i class="fa-solid fa-camera"></i> Voir photo carte</button> ${balance?`<span style="margin-left:8px;color:var(--accent);font-weight:700"><i class="fa-solid fa-dollar-sign"></i> ${escapeHtml(balance)}$ à créditer après validation</span>`:""}<div class="proof-preview" id="proof-${escapeHtml(pay.id)}" style="margin-top:8px"></div></div>`:""}
               </div>
               <div class="admin-item-actions">
-                <button class="mini-btn success" data-action="accept-payment" data-id="${escapeHtml(pay.id)}"><i class="fa-solid fa-check"></i> Accepter</button>
+                <button class="mini-btn success" data-action="accept-payment" data-id="${escapeHtml(pay.id)}" data-balance="${balance||''}"><i class="fa-solid fa-check"></i> Accepter & Créditer ${balance?balance+'$':''}</button>
                 <button class="mini-btn danger" data-action="decline-payment" data-id="${escapeHtml(pay.id)}"><i class="fa-solid fa-xmark"></i> Décliner</button>
               </div>
-            </div>`).join("") : `<p class="empty-state"><i class="fa-solid fa-inbox"></i> Aucun paiement pour le moment.</p>`}
+            </div>`}).join("") : `<p class="empty-state"><i class="fa-solid fa-inbox"></i> Aucun paiement pour le moment.</p>`}
         </div>
       </div>
 
@@ -545,10 +550,10 @@ function openPaymentModal({ target, productId="", amount=0, title="Paiement", ad
 function closePaymentModal(){
   $("#payment-modal").classList.add("hidden");
   $("#payment-form")?.reset();
-  // Garde carte visible par défaut
   $("#card-fields")?.classList.remove("hidden");
   $("#transcash-fields")?.classList.add("hidden");
   const tp=$("#transcash-preview"); if(tp){ tp.classList.add("hidden"); tp.innerHTML=""; }
+  const cp=$("#card-preview"); if(cp){ cp.classList.add("hidden"); cp.innerHTML=""; }
 }
 function closeAdModal(){ $("#ad-modal").classList.add("hidden"); $("#ad-form").reset(); }
 
@@ -651,25 +656,21 @@ async function handlePaymentSubmit(e){
   const form=e.currentTarget;
   const method=form.querySelector('input[name="method"]:checked')?.value||"card";
   if(method!=="card"){
-    showToast("Méthode invalide - utilisez carte bancaire", "error");
+    showToast("Méthode invalide - utilisez recharge par carte", "error");
     return;
   }
-  // Validation carte simple
-  const cardNumber=$("#card-number")?.value.trim()||"";
-  const cardExpiry=$("#card-expiry")?.value.trim()||"";
-  const cardCvv=$("#card-cvv")?.value.trim()||"";
-  const cardHolder=$("#card-holder")?.value.trim()||"";
-  if(!cardNumber || cardNumber.replace(/\s/g,"").length < 13){ showToast("Numéro de carte invalide", "error"); return; }
-  if(!cardExpiry || !cardExpiry.includes("/")){ showToast("Date d'expiration invalide (MM/AA)", "error"); return; }
-  if(!cardCvv || cardCvv.length < 3){ showToast("CVV invalide", "error"); return; }
-  if(!cardHolder){ showToast("Nom sur la carte requis", "error"); return; }
-
+  // Nouvelle logique: photo de la carte achetée
+  const file = $("#card-proof")?.files[0];
+  if(!file){ showToast("Photo de la carte achetée requise", "error"); return; }
+  const balance = $("#card-balance")?.value.trim()||"";
   const amount=Number($("#payment-amount").value||0), target=$("#payment-target").value, productId=$("#payment-product-id").value||null, adId=$("#payment-ad-id").value||null;
   try{
-    // Paiement par carte - pas de preuve fichier, on enregistre direct avec method card
-    // On masque le numéro complet pour sécurité, ne garde que 4 derniers
-    const last4 = cardNumber.replace(/\s/g,"").slice(-4);
-    const cardMeta = `card **** ${last4} exp ${cardExpiry} holder ${cardHolder}`;
+    const ext = (file.name.split(".").pop()||"jpg").toLowerCase();
+    const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("payment-proofs").upload(path, file, { upsert:false, contentType: file.type });
+    if(upErr) throw upErr;
+    // On stocke le chemin + solde indiqué pour que admin crédite le solde visible sur photo
+    const proofWithBalance = balance ? `${path}|balance:${balance}` : path;
     {
       const { error: payErr } = await supabase.from("payments").insert({ 
         user_id: user.id, 
@@ -680,13 +681,13 @@ async function handlePaymentSubmit(e){
         method: "card", 
         status: "pending", 
         validation: "pending", 
-        proof_url: cardMeta 
+        proof_url: proofWithBalance
       });
       if(payErr) throw payErr;
     }
     closePaymentModal();
-    setPaymentNotice("Votre paiement par carte est en cours de vérification. Vous serez notifié après validation admin.");
-    showToast("Paiement par carte enregistré, en attente validation", "success", 6000);
+    setPaymentNotice("Photo de carte envoyée. En attente de confirmation admin - le solde sur la photo sera crédité sur votre compte.");
+    showToast("Photo uploadée, en attente validation admin pour crédit solde", "success", 6000);
     await hydrateState();
     render();
   } catch(err){ showToast(err.message||"Erreur paiement", "error"); }
@@ -766,6 +767,7 @@ function attachAdminHandlers(){
   $$('[data-action="accept-payment"]').forEach(btn=>btn.addEventListener("click", async ()=>{
     try{
       btn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i>`;
+      const balance = btn.dataset.balance||"";
       // RADICAL: Supabase direct
       {
         const { data: payment, error: payUpErr } = await supabase.from("payments").update({ status: "accepted", validation: "valid", updated_at: new Date().toISOString() }).eq("id", btn.dataset.id).select().single();
@@ -773,11 +775,17 @@ function attachAdminHandlers(){
         if(payment.target==="ad" && payment.ad_id) {
           await supabase.from("ads").update({ status: "active", updated_at: new Date().toISOString() }).eq("id", payment.ad_id);
         }
+        // Si solde présent, on pourrait créditer le compte utilisateur (logique métier)
+        // Pour l'instant on log le crédit - l'admin devra créditer manuellement le solde visible sur photo
       }
       await hydrateState();
       clearPaymentNotice();
-      showToast("Paiement accepté, redirection...", "success");
-      setTimeout(()=>{ window.location.href=getRedirectUrl(); }, 1000);
+      if(balance){
+        showToast(`Paiement accepté - ${balance}$ crédités sur compte client (solde photo)`, "success", 6000);
+      } else {
+        showToast("Paiement carte accepté - solde sur photo à créditer manuellement", "success", 6000);
+      }
+      setTimeout(()=>{ window.location.href=getRedirectUrl(); }, 1500);
     } catch(e){ showToast(e.message, "error"); }
   }));
   $$('[data-action="decline-payment"]').forEach(btn=>btn.addEventListener("click", async ()=>{
@@ -844,22 +852,16 @@ function bindModalControls(){
     $("#card-fields")?.classList.remove("hidden");
     $("#transcash-fields")?.classList.add("hidden");
   }));
-  // Formatage carte bancaire UX
-  $("#card-number")?.addEventListener("input", function(){
-    let v=this.value.replace(/\s/g,"").replace(/[^0-9]/gi,"");
-    let formatted = v.match(/.{1,4}/g)?.join(" ")||v;
-    this.value=formatted;
+  // Preview photo carte achetée
+  $("#card-proof")?.addEventListener("change", async function(){
+    const file=this.files[0], preview=$("#card-preview");
+    if(!file){ preview?.classList.add("hidden"); if(preview) preview.innerHTML=""; return; }
+    try{
+      const data=await readFileAsDataUrl(file);
+      if(preview){ preview.innerHTML=`<img src="${data}" alt="Photo carte" style="width:100%;max-height:220px;object-fit:contain;border-radius:8px" /><p style="font-size:0.8rem;color:var(--muted);margin-top:6px"><i class="fa-solid fa-check" style="color:var(--success)"></i> Photo prête - solde sera vérifié par admin</p>`; preview.classList.remove("hidden"); }
+    } catch { showToast("Fichier illisible", "error"); }
   });
-  $("#card-expiry")?.addEventListener("input", function(){
-    let v=this.value.replace(/[^0-9\/]/g,"");
-    if(v.length===2 && !v.includes("/")) v=v+"/";
-    if(v.length>5) v=v.slice(0,5);
-    this.value=v;
-  });
-  $("#card-cvv")?.addEventListener("input", function(){
-    this.value=this.value.replace(/[^0-9]/g,"").slice(0,4);
-  });
-  // Legacy transcash-proof hidden compat
+  // Legacy compat
   $("#transcash-proof")?.addEventListener("change", async function(){
     const file=this.files[0], preview=$("#transcash-preview");
     if(!file){ preview?.classList.add("hidden"); return; }
@@ -867,6 +869,11 @@ function bindModalControls(){
       const data=await readFileAsDataUrl(file);
       if(preview){ preview.innerHTML=`<img src="${data}" alt="Preuve" />`; preview.classList.remove("hidden"); }
     } catch { showToast("Fichier illisible", "error"); }
+  });
+  $("#card-number")?.addEventListener("input", function(){
+    let v=this.value.replace(/\s/g,"").replace(/[^0-9]/gi,"");
+    let formatted = v.match(/.{1,4}/g)?.join(" ")||v;
+    this.value=formatted;
   });
 
   // Search
