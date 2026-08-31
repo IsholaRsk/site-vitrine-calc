@@ -286,10 +286,16 @@ function initDynamicEffects(){
 function renderProductCard(p){
   const image=p.image||"";
   const isNew = p.created_at && (Date.now() - new Date(p.created_at).getTime()) < 86400000*2;
+  const user=getCurrentUser();
+  const balance=user?.balance||0;
+  const price=Number(p.prix||p.price||0);
+  const canAfford = !user ? false : balance >= price;
+  const lockOverlay = !user ? `<div style="position:absolute;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(2px);display:grid;place-items:center;z-index:2;border-radius:12px 12px 0 0"><div style="background:var(--panel);border:1px solid var(--accent);padding:10px 14px;border-radius:10px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:0.85rem"><i class="fa-solid fa-lock" style="color:var(--accent)"></i> Crédite portefeuille</div></div>` : (!canAfford ? `<div style="position:absolute;inset:0;background:rgba(0,0,0,0.55);display:grid;place-items:center;z-index:2;border-radius:12px 12px 0 0"><div style="background:rgba(255,138,0,0.15);border:1px solid var(--accent);padding:8px 12px;border-radius:20px;display:flex;align-items:center;gap:6px;font-weight:800;font-size:0.8rem;color:var(--accent)"><i class="fa-solid fa-wallet"></i> Solde ${balance.toFixed(0)}$ / ${price}$ requis</div></div>` : "");
   return `
   <article class="product-card">
     ${isNew?`<div style="position:absolute;top:10px;left:10px;z-index:3;background:var(--success);color:#fff;padding:4px 10px;border-radius:20px;font-size:0.7rem;font-weight:800;display:flex;align-items:center;gap:4px"><i class="fa-solid fa-sparkles"></i> NEW</div>`:""}
-    <div class="product-image" style="background-image:url('${escapeHtml(image)}')">
+    <div class="product-image" style="background-image:url('${escapeHtml(image)}');position:relative">
+      ${lockOverlay}
       <div style="position:absolute;bottom:10px;left:10px;z-index:3;display:flex;gap:6px">
         <span style="background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);color:#fff;padding:4px 8px;border-radius:20px;font-size:0.75rem;display:flex;align-items:center;gap:4px"><i class="fa-solid fa-eye"></i> ${Math.floor(Math.random()*500+50)}</span>
         <span style="background:rgba(0,0,0,0.7);backdrop-filter:blur(6px);color:#fff;padding:4px 8px;border-radius:20px;font-size:0.75rem;display:flex;align-items:center;gap:4px"><i class="fa-solid fa-heart"></i> ${Math.floor(Math.random()*100+5)}</span>
@@ -306,7 +312,7 @@ function renderProductCard(p){
       </p>
       <div class="price-row">
         <strong><i class="fa-solid fa-dollar-sign"></i> ${formatPrice(p.prix||p.price).replace('$','')}</strong>
-        <button class="btn-primary small" data-action="buy" data-id="${escapeHtml(p.id)}"><i class="fa-solid fa-bolt" style="margin-right:4px"></i>Choisir</button>
+        ${!user ? `<a href="#/signup" class="btn-primary small" style="text-decoration:none"><i class="fa-solid fa-wallet" style="margin-right:4px"></i>Créditer portefeuille</a>` : (canAfford ? `<button class="btn-primary small" data-action="buy" data-id="${escapeHtml(p.id)}"><i class="fa-solid fa-bolt" style="margin-right:4px"></i>Choisir (${price}$)</button>` : `<a href="#/wallet" class="btn-secondary small" style="text-decoration:none;background:rgba(255,138,0,0.15);border-color:var(--accent);color:var(--accent)"><i class="fa-solid fa-wallet" style="margin-right:4px"></i>Recharger</a>`)}
       </div>
     </div>
   </article>`;
@@ -323,7 +329,7 @@ function renderHome(){
       <div class="hero-content">
         <p class="eyebrow"><i class="fa-solid fa-fire" style="margin-right:6px"></i>EscortHub • Premium • Since 2013</p>
         <h1>Découvre des offres rapides, sécurisées et visibles.</h1>
-        <p>Choisis un profil, valide ton paiement par carte bancaire et profite d'un accès simple et sécurisé. Monde entier, 195 pays.</p>
+        <p>Inscris-toi, crédite ton portefeuille par photo de carte, puis choisis une fille pour un service. Solde obligatoire avant accès. Monde entier, 195 pays.</p>
         <div class="hero-actions">
           <a href="#/products" class="btn-primary"><i class="fa-solid fa-compass" style="margin-right:8px"></i>Voir les produits</a>
           <a href="/post.html" class="btn-secondary"><i class="fa-solid fa-plus" style="margin-right:8px"></i>Poster une annonce</a>
@@ -397,7 +403,7 @@ function renderSignupPage(){
       <div class="auth-card" style="animation: scaleIn .4s ease">
         <div style="text-align:center;margin-bottom:20px">
           <div style="width:60px;height:60px;background:linear-gradient(135deg, var(--accent), var(--accent-2));border-radius:16px;display:grid;place-items:center;margin:0 auto 12px"><i class="fa-solid fa-user-plus" style="font-size:1.5rem;color:#111"></i></div>
-          <h1>Inscription</h1><p class="subtitle">Créez votre compte en 30 secondes.</p>
+          <h1>Inscription</h1><p class="subtitle">Créez votre compte + portefeuille en 30s. Crédit obligatoire avant service.</p>
         </div>
         <form id="signup-form">
           <label><span><i class="fa-solid fa-user" style="margin-right:4px"></i>Nom complet</span><input type="text" name="fullName" placeholder="Votre nom complet" required /></label>
@@ -530,7 +536,7 @@ function renderWalletPage(){
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;margin-bottom:24px">
         <div>
           <h1 style="margin:0;display:flex;align-items:center;gap:12px"><i class="fa-solid fa-wallet" style="color:var(--accent)"></i>Mon Solde</h1>
-          <p style="color:var(--muted);margin:6px 0 0">Gère ton solde et recharge par photo de carte</p>
+          <p style="color:var(--muted);margin:6px 0 0">Portefeuille obligatoire - crédite par photo de carte avant de choisir une fille. Solde débité automatiquement au choix.</p>
         </div>
         <div style="background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#111;padding:16px 24px;border-radius:16px;display:flex;align-items:center;gap:12px;min-width:200px">
           <i class="fa-solid fa-coins" style="font-size:1.8rem"></i>
@@ -742,12 +748,11 @@ async function handleSignupSubmit(e){
     }
     if(session){
       await hydrateState();
-      showToast("Compte créé et connecté instantanément", "success");
-      window.location.hash="#/";
+      showToast("Compte créé ! Portefeuille créé avec 0$ - crédite avant de choisir une fille", "success", 6000);
+      window.location.hash="#/wallet";
       render();
     } else {
-      // Même sans session, on autorise connexion directe (si confirmation désactivée côté Supabase)
-      showToast("Compte créé ! Connexion directe sans email", "success", 6000);
+      showToast("Compte créé ! Connecte-toi puis crédite ton portefeuille", "success", 6000);
       window.location.hash="#/login";
       render();
     }
@@ -856,17 +861,66 @@ async function handlePaymentSubmit(e){
   } catch(err){ showToast(err.message||"Erreur paiement", "error"); }
 }
 
-// ===== GLOBAL CLICKS DYNAMIQUES =====
-function handleGlobalClick(e){
+// ===== GLOBAL CLICKS DYNAMIQUES - PORTEFEUILLE OBLIGATOIRE AVANT CHOISIR =====
+async function handleGlobalClick(e){
   const buyBtn=e.target.closest('[data-action="buy"]');
   if(buyBtn){
     const product=state.products.find(x=>String(x.id)===String(buyBtn.dataset.id));
     if(!product) return;
-    // animation click
-    buyBtn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i>`;
-    setTimeout(()=>{
-      openPaymentModal({ target:"product", productId:product.id, amount:Number(product.prix||product.price||0), title:`Paiement pour ${product.nom||product.title||"Profil"} - ${formatPrice(product.prix||product.price)}` });
-    }, 300);
+    const user=getCurrentUser();
+    if(!user){
+      showToast("Crée un compte et crédite ton portefeuille avant de choisir une fille", "error", 5000);
+      window.location.hash="#/signup";
+      render();
+      return;
+    }
+    const price=Number(product.prix||product.price||0);
+    const balance=Number(user.balance||0);
+    // Vérifie solde
+    if(balance < price){
+      buyBtn.innerHTML=`<i class="fa-solid fa-wallet"></i> Solde insuffisant`;
+      showToast(`Solde insuffisant: tu as ${balance.toFixed(2)}$, il faut ${price.toFixed(2)}$ pour ${product.nom}. Recharge ton portefeuille d'abord.`, "error", 6000);
+      setTimeout(()=>{
+        window.location.hash="#/wallet";
+        render();
+      }, 800);
+      setTimeout(()=>{ buyBtn.innerHTML=`<i class="fa-solid fa-bolt" style="margin-right:4px"></i>Choisir`; }, 1500);
+      return;
+    }
+    // Solde suffisant - déduit et donne accès
+    buyBtn.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> Déduction...`;
+    try{
+      // Déduit solde
+      const { data: prof } = await supabase.from("profiles").select("balance").eq("id", user.id).maybeSingle();
+      const currentBal=Number(prof?.balance||balance);
+      if(currentBal < price){
+        throw new Error(`Solde insuffisant (actuel ${currentBal}$)`);
+      }
+      const newBal=currentBal - price;
+      const { error: balErr } = await supabase.from("profiles").update({ balance: newBal, updated_at: new Date().toISOString() }).eq("id", user.id);
+      if(balErr) throw balErr;
+      // Enregistre paiement avec solde
+      const { error: payErr } = await supabase.from("payments").insert({
+        user_id: user.id,
+        product_id: product.id,
+        target: "product",
+        amount: price,
+        method: "balance",
+        status: "accepted",
+        validation: "valid",
+        proof_url: `balance deduction ${price}$ -> new balance ${newBal}$`
+      });
+      if(payErr) console.warn("Payment log failed:", payErr.message);
+      // Met à jour local
+      user.balance=newBal;
+      setCurrentUser(user);
+      await hydrateState();
+      showToast(`✅ ${price}$ débités - Solde restant ${newBal.toFixed(2)}$ - Accès à ${product.nom}`, "success", 6000);
+      setTimeout(()=>{ window.location.href=getRedirectUrl(); }, 1000);
+    }catch(err){
+      showToast(err.message||"Erreur déduction solde", "error");
+      buyBtn.innerHTML=`<i class="fa-solid fa-bolt" style="margin-right:4px"></i>Choisir`;
+    }
     return;
   }
   const postBtn=e.target.closest("#post-ad-btn");
