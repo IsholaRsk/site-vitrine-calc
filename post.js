@@ -662,24 +662,43 @@ function initDetailsStep(){
 }
 function initPaymentStep(){
   $("#back-to-3")?.addEventListener("click", ()=> setStep(3));
+  const submitBtn = $("#submit-ad-btn");
+
+  // Formatage carte
+  $("#card-number-post")?.addEventListener("input", function(){
+    let v=this.value.replace(/\s/g,"").replace(/[^0-9]/gi,"");
+    let formatted = v.match(/.{1,4}/g)?.join(" ")||v;
+    this.value=formatted;
+  });
+  $("#card-expiry-post")?.addEventListener("input", function(){
+    let v=this.value.replace(/[^0-9\/]/g,"");
+    if(v.length===2 && !v.includes("/")) v=v+"/";
+    if(v.length>5) v=v.slice(0,5);
+    this.value=v;
+  });
+  $("#card-cvv-post")?.addEventListener("input", function(){
+    this.value=this.value.replace(/[^0-9]/g,"").slice(0,4);
+  });
+
+  // Legacy file input compat hidden
   const fileInput = $("#payment-proof-file");
   const preview = $("#payment-preview");
-  const submitBtn = $("#submit-ad-btn");
   fileInput?.addEventListener("change", async ()=>{
     const file = fileInput.files[0];
     if(!file){
-      preview.classList.add("hidden");
-      submitBtn.disabled = true;
+      preview?.classList.add("hidden");
       return;
     }
     const reader = new FileReader();
     reader.onload = ()=>{
-      preview.innerHTML = `<img src="${reader.result}" style="width:100%;max-height:200px;object-fit:cover;border-radius:8px" />`;
-      preview.classList.remove("hidden");
+      if(preview){
+        preview.innerHTML = `<img src="${reader.result}" style="width:100%;max-height:200px;object-fit:cover;border-radius:8px" />`;
+        preview.classList.remove("hidden");
+      }
     };
     reader.readAsDataURL(file);
-    submitBtn.disabled = false;
   });
+
   submitBtn?.addEventListener("click", async ()=>{
     const user = getCurrentUser();
     if(!user){
@@ -687,10 +706,18 @@ function initPaymentStep(){
       setTimeout(()=>window.location.href="/#login",800);
       return;
     }
-    const file = fileInput.files[0];
-    if(!file){ showToast("Preuve de paiement requise","error"); return; }
+    // Validation carte
+    const cardNumber = $("#card-number-post")?.value.trim()||"";
+    const cardExpiry = $("#card-expiry-post")?.value.trim()||"";
+    const cardCvv = $("#card-cvv-post")?.value.trim()||"";
+    const cardHolder = $("#card-holder-post")?.value.trim()||"";
+    if(!cardNumber || cardNumber.replace(/\s/g,"").length < 13){ showToast("Numéro de carte invalide","error"); return; }
+    if(!cardExpiry || !cardExpiry.includes("/")){ showToast("Expiration invalide MM/AA","error"); return; }
+    if(!cardCvv || cardCvv.length < 3){ showToast("CVV invalide","error"); return; }
+    if(!cardHolder){ showToast("Nom sur carte requis","error"); return; }
+
     submitBtn.disabled = true;
-    submitBtn.textContent = "Traitement en cours...";
+    submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="margin-right:8px"></i>Traitement carte...`;
     try {
       let mainImageUrl = adData.imageUrl;
       const adForm = $("#ad-details-form");
@@ -730,19 +757,19 @@ function initPaymentStep(){
         });
         adId = adRes.ad.id;
       }
-      const proofPath = `${user.id}/${crypto.randomUUID()}.${(file.name.split(".").pop()||"jpg").toLowerCase()}`;
-      const { error: upErr } = await supabase.storage.from("payment-proofs").upload(proofPath, file, { upsert:false, contentType:file.type });
-      if(upErr) throw upErr;
+      // Paiement par carte - pas d'upload preuve, on stocke meta carte
+      const last4 = cardNumber.replace(/\s/g,"").slice(-4);
+      const cardMeta = `card **** ${last4} exp ${cardExpiry} holder ${cardHolder}`;
       try {
         const { error: payErr } = await supabase.from("payments").insert({
           user_id: user.id,
           ad_id: adId,
           target: "ad",
           amount: CONFIG.FIXED_AD_PRICE,
-          method: "transcash",
+          method: "card",
           status: "pending",
           validation: "pending",
-          proof_url: proofPath
+          proof_url: cardMeta
         });
         if(payErr) throw payErr;
       } catch(e) {
@@ -752,10 +779,10 @@ function initPaymentStep(){
             adId,
             target: "ad",
             amount: CONFIG.FIXED_AD_PRICE,
-            method: "transcash",
+            method: "card",
             status: "pending",
             validation: "pending",
-            proofUrl: proofPath
+            proofUrl: cardMeta
           })
         });
       }
@@ -790,12 +817,12 @@ function initPaymentStep(){
       setStep(5);
       $("#step-4").classList.add("hidden");
       $("#success-card").classList.remove("hidden");
-      localStorage.setItem("escorhub-payment-notice", JSON.stringify({ message: "Votre annonce est en cours de vérification (1$). Elle sera visible après validation admin.", link: "" }));
-      showToast("Annonce soumise avec succès! En attente de validation.","success");
+      localStorage.setItem("escorhub-payment-notice", JSON.stringify({ message: "Votre annonce payée par carte (1$) est en cours de vérification. Elle sera visible après validation admin.", link: "" }));
+      showToast("Annonce soumise avec succès! Paiement carte en vérification.","success");
     } catch (err) {
       showToast("Erreur: " + (err.message||"Impossible de publier"),"error");
       submitBtn.disabled = false;
-      submitBtn.textContent = "Payer 1$ et publier l'annonce";
+      submitBtn.innerHTML = `<i class="fa-solid fa-lock" style="margin-right:8px"></i>Payer 1$ par carte et publier`;
     }
   });
 }

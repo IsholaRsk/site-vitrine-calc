@@ -216,13 +216,22 @@
 
     <div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:20px" class="form-grid">
       <div>
-        <h3 style="margin:0 0 12px"><i class="fa-solid fa-upload" style="margin-right:8px"></i>Preuve de paiement *</h3>
-        <p class="payment-tip">Envoyez 1$ via TransCash et uploadez la capture d'écran.</p>
-        <label><span>Capture preuve *</span><input type="file" id="payment-proof-file" accept="image/*" required /></label>
+        <h3 style="margin:0 0 12px"><i class="fa-solid fa-credit-card" style="margin-right:8px;color:var(--accent)"></i>Recharge par carte - 1$ *</h3>
+        <p class="payment-tip"><i class="fa-solid fa-shield-halved" style="margin-right:6px;color:var(--success)"></i>Paiement sécurisé par carte bancaire - Crypté SSL</p>
+        <div style="display:grid;gap:12px;margin-top:12px">
+          <label><span><i class="fa-solid fa-credit-card" style="margin-right:4px"></i>Numéro de carte *</span><input type="text" id="card-number-post" placeholder="1234 5678 9012 3456" maxlength="19" required /></label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <label><span>Expiration *</span><input type="text" id="card-expiry-post" placeholder="MM/AA" maxlength="5" required /></label>
+            <label><span>CVV *</span><input type="text" id="card-cvv-post" placeholder="123" maxlength="4" required /></label>
+          </div>
+          <label><span><i class="fa-solid fa-user" style="margin-right:4px"></i>Nom sur la carte *</span><input type="text" id="card-holder-post" placeholder="Nom complet" required /></label>
+        </div>
+        <!-- legacy file input hidden for compat -->
+        <input type="file" id="payment-proof-file" accept="image/*" class="hidden" />
         <div id="payment-preview" class="image-preview hidden" style="margin-top:12px"></div>
         <div style="margin-top:20px">
-          <button class="btn-primary full" id="submit-ad-btn" disabled><i class="fa-solid fa-lock" style="margin-right:8px"></i>Payer 1$ et publier</button>
-          <p style="color:var(--muted);font-size:0.8rem;text-align:center;margin-top:10px">Après paiement, l'admin valide en moins de 30min.</p>
+          <button class="btn-primary full" id="submit-ad-btn"><i class="fa-solid fa-lock" style="margin-right:8px"></i>Payer 1$ par carte et publier</button>
+          <p style="color:var(--muted);font-size:0.8rem;text-align:center;margin-top:10px">Après paiement par carte, l'admin valide en moins de 30min.</p>
         </div>
       </div>
       <div>

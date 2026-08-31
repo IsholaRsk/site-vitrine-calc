@@ -160,11 +160,15 @@ app.post("/api/payments", async (req, res) => {
   if (!user) return;
   const body = req.body;
   const amount = Number(body.amount);
-  const method = String(body.method || "transcash").trim();
+  const method = String(body.method || "card").trim();
   if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "Montant invalide." });
-  if (method !== "transcash") return res.status(400).json({ error: "Méthode non disponible. Seul TransCash accepté." });
+  if (!["card","transcash"].includes(method)) return res.status(400).json({ error: "Méthode non disponible. Seule carte bancaire acceptée." });
   const proofUrl = String(body.proofUrl || "").trim();
-  if (!proofUrl) return res.status(400).json({ error: "Preuve de paiement requise." });
+  // Pour carte, proofUrl contient meta carte ****, pas besoin fichier
+  if (method === "transcash" && !proofUrl) return res.status(400).json({ error: "Preuve de paiement requise." });
+  if (method === "card" && !proofUrl) {
+    // Autorise sans preuve fichier, on met meta générique
+  }
 
   const payload = {
     user_id: user.id,

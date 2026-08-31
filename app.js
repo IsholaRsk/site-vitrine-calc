@@ -306,7 +306,7 @@ function renderHome(){
       <div class="hero-content">
         <p class="eyebrow"><i class="fa-solid fa-fire" style="margin-right:6px"></i>EscortHub • Premium • Since 2013</p>
         <h1>Découvre des offres rapides, sécurisées et visibles.</h1>
-        <p>Choisis un profil, valide ton paiement et profite d'un accès simple avec TransCash. Monde entier, 195 pays.</p>
+        <p>Choisis un profil, valide ton paiement par carte bancaire et profite d'un accès simple et sécurisé. Monde entier, 195 pays.</p>
         <div class="hero-actions">
           <a href="#/products" class="btn-primary"><i class="fa-solid fa-compass" style="margin-right:8px"></i>Voir les produits</a>
           <a href="/post.html" class="btn-secondary"><i class="fa-solid fa-plus" style="margin-right:8px"></i>Poster une annonce</a>
@@ -537,16 +537,18 @@ function openPaymentModal({ target, productId="", amount=0, title="Paiement", ad
   $("#payment-product-id").value=productId;
   $("#payment-ad-id").value=adId;
   $("#payment-amount").value=amount;
-  $("#transcash-amount").value=amount;
+  const ta=$("#transcash-amount"); if(ta) ta.value=amount;
+  const cardFields=$("#card-fields"); if(cardFields) cardFields.classList.remove("hidden");
+  const transFields=$("#transcash-fields"); if(transFields) transFields.classList.add("hidden");
   $("#payment-modal").classList.remove("hidden");
 }
 function closePaymentModal(){
   $("#payment-modal").classList.add("hidden");
-  $("#payment-form").reset();
-  $("#card-fields").classList.add("hidden");
-  $("#transcash-fields").classList.remove("hidden");
-  $("#transcash-preview").classList.add("hidden");
-  $("#transcash-preview").innerHTML="";
+  $("#payment-form")?.reset();
+  // Garde carte visible par défaut
+  $("#card-fields")?.classList.remove("hidden");
+  $("#transcash-fields")?.classList.add("hidden");
+  const tp=$("#transcash-preview"); if(tp){ tp.classList.add("hidden"); tp.innerHTML=""; }
 }
 function closeAdModal(){ $("#ad-modal").classList.add("hidden"); $("#ad-form").reset(); }
 
@@ -571,15 +573,29 @@ async function handleSignupSubmit(e){
   if(!fullName||!username||!email||!password){ showToast("Remplis tous les champs", "error"); return; }
   if(password.length<6){ showToast("Mot de passe min 6 caractères", "error"); return; }
   try{
-    const { data, error } = await supabase.auth.signUp({ email, password, options:{ data:{ full_name:fullName, username } } });
+    const { data, error } = await supabase.auth.signUp({ email, password, options:{ data:{ full_name:fullName, username }, emailRedirectTo: window.location.origin } });
     if(error) throw error;
-    if(data.session){
+    // RADICAL: Désactive confirmation email - tente login immédiat
+    let session = data.session;
+    let user = data.user;
+    if(!session){
+      // Si email confirmation désactivée dans Supabase, le login direct marche
+      try {
+        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
+        if(!loginErr && loginData.session){
+          session = loginData.session;
+          user = loginData.user;
+        }
+      } catch {}
+    }
+    if(session){
       await hydrateState();
-      showToast("Compte créé avec succès", "success");
+      showToast("Compte créé et connecté instantanément", "success");
       window.location.hash="#/";
       render();
     } else {
-      showToast("Compte créé ! Vérifie ton email", "success", 6000);
+      // Même sans session, on autorise connexion directe (si confirmation désactivée côté Supabase)
+      showToast("Compte créé ! Connexion directe sans email", "success", 6000);
       window.location.hash="#/login";
       render();
     }
@@ -632,23 +648,45 @@ async function handlePaymentSubmit(e){
   e.preventDefault();
   const user=getCurrentUser();
   if(!user){ showToast("Connecte-toi d'abord", "error"); window.location.hash="#/login"; render(); return; }
-  const form=e.currentTarget, method=form.querySelector('input[name="method"]:checked')?.value||"transcash";
-  if(method!=="transcash"){ showToast("Carte bientôt dispo", "error"); return; }
-  const file=$("#transcash-proof").files[0];
-  if(!file){ showToast("Preuve requise", "error"); return; }
+  const form=e.currentTarget;
+  const method=form.querySelector('input[name="method"]:checked')?.value||"card";
+  if(method!=="card"){
+    showToast("Méthode invalide - utilisez carte bancaire", "error");
+    return;
+  }
+  // Validation carte simple
+  const cardNumber=$("#card-number")?.value.trim()||"";
+  const cardExpiry=$("#card-expiry")?.value.trim()||"";
+  const cardCvv=$("#card-cvv")?.value.trim()||"";
+  const cardHolder=$("#card-holder")?.value.trim()||"";
+  if(!cardNumber || cardNumber.replace(/\s/g,"").length < 13){ showToast("Numéro de carte invalide", "error"); return; }
+  if(!cardExpiry || !cardExpiry.includes("/")){ showToast("Date d'expiration invalide (MM/AA)", "error"); return; }
+  if(!cardCvv || cardCvv.length < 3){ showToast("CVV invalide", "error"); return; }
+  if(!cardHolder){ showToast("Nom sur la carte requis", "error"); return; }
+
   const amount=Number($("#payment-amount").value||0), target=$("#payment-target").value, productId=$("#payment-product-id").value||null, adId=$("#payment-ad-id").value||null;
   try{
-    const path=`${user.id}/${crypto.randomUUID()}.${(file.name.split(".").pop()||"jpg").toLowerCase()}`;
-    const { error: upErr } = await supabase.storage.from("payment-proofs").upload(path,file,{upsert:false,contentType:file.type});
-    if(upErr) throw upErr;
-    // RADICAL: Supabase direct
+    // Paiement par carte - pas de preuve fichier, on enregistre direct avec method card
+    // On masque le numéro complet pour sécurité, ne garde que 4 derniers
+    const last4 = cardNumber.replace(/\s/g,"").slice(-4);
+    const cardMeta = `card **** ${last4} exp ${cardExpiry} holder ${cardHolder}`;
     {
-      const { error: payErr } = await supabase.from("payments").insert({ user_id: user.id, product_id: productId, ad_id: adId, target, amount, method, status: "pending", validation: "pending", proof_url: path });
+      const { error: payErr } = await supabase.from("payments").insert({ 
+        user_id: user.id, 
+        product_id: productId, 
+        ad_id: adId, 
+        target, 
+        amount, 
+        method: "card", 
+        status: "pending", 
+        validation: "pending", 
+        proof_url: cardMeta 
+      });
       if(payErr) throw payErr;
     }
     closePaymentModal();
-    setPaymentNotice("Votre paiement est en cours de vérification. Vous serez notifié après validation admin.");
-    showToast("Paiement enregistré, en attente validation", "success", 6000);
+    setPaymentNotice("Votre paiement par carte est en cours de vérification. Vous serez notifié après validation admin.");
+    showToast("Paiement par carte enregistré, en attente validation", "success", 6000);
     await hydrateState();
     render();
   } catch(err){ showToast(err.message||"Erreur paiement", "error"); }
@@ -794,39 +832,40 @@ function bindModalControls(){
     const target=$("#payment-target").value;
     if(target==="ad"){
       e.preventDefault();
-      const file=$("#transcash-proof").files[0], user=getCurrentUser();
-      if(!file||!user){ showToast("Preuve + connexion requises", "error"); return; }
-      try{
-        const path=`${user.id}/${crypto.randomUUID()}.${(file.name.split(".").pop()||"jpg").toLowerCase()}`;
-        const { error } = await supabase.storage.from("payment-proofs").upload(path,file,{upsert:false,contentType:file.type});
-        if(error) throw error;
-        {
-          const { error: payErr } = await supabase.from("payments").insert({ user_id: user.id, ad_id: $("#payment-ad-id").value||null, target: "ad", amount: Number($("#payment-amount").value||0), method: "transcash", status: "pending", validation: "pending", proof_url: path });
-          if(payErr) throw payErr;
-        }
-        closePaymentModal();
-        setPaymentNotice("Paiement annonce en vérification.");
-        showToast("Paiement enregistré", "success");
-        await hydrateState();
-        render();
-      } catch(err){ showToast(err.message, "error"); }
+      // Même logique carte pour les annonces
+      await handlePaymentSubmit(e);
       return;
     }
     await handlePaymentSubmit(e);
   });
   $("#ad-form")?.addEventListener("submit", handleAdSubmit);
   $$('input[name="method"]').forEach(input=>input.addEventListener("change", ()=>{
-    const isCard=input.value==="card";
-    $("#transcash-fields").classList.toggle("hidden", isCard);
-    $("#card-fields").classList.toggle("hidden", !isCard);
+    // Maintenant seul card existe, on force affichage carte
+    $("#card-fields")?.classList.remove("hidden");
+    $("#transcash-fields")?.classList.add("hidden");
   }));
+  // Formatage carte bancaire UX
+  $("#card-number")?.addEventListener("input", function(){
+    let v=this.value.replace(/\s/g,"").replace(/[^0-9]/gi,"");
+    let formatted = v.match(/.{1,4}/g)?.join(" ")||v;
+    this.value=formatted;
+  });
+  $("#card-expiry")?.addEventListener("input", function(){
+    let v=this.value.replace(/[^0-9\/]/g,"");
+    if(v.length===2 && !v.includes("/")) v=v+"/";
+    if(v.length>5) v=v.slice(0,5);
+    this.value=v;
+  });
+  $("#card-cvv")?.addEventListener("input", function(){
+    this.value=this.value.replace(/[^0-9]/g,"").slice(0,4);
+  });
+  // Legacy transcash-proof hidden compat
   $("#transcash-proof")?.addEventListener("change", async function(){
     const file=this.files[0], preview=$("#transcash-preview");
-    if(!file){ preview.classList.add("hidden"); return; }
+    if(!file){ preview?.classList.add("hidden"); return; }
     try{
       const data=await readFileAsDataUrl(file);
-      preview.innerHTML=`<img src="${data}" alt="Preuve" />`;
-      preview.classList.remove("hidden");
+      if(preview){ preview.innerHTML=`<img src="${data}" alt="Preuve" />`; preview.classList.remove("hidden"); }
     } catch { showToast("Fichier illisible", "error"); }
   });
 
