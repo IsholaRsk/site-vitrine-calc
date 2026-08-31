@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin - Demandes de dépôt - EscortHub</title>
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="./user_deposit.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <script type="importmap">
+  { "imports": { "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.0/+esm" } }
+  </script>
+  <style>
+    .admin-filters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+    .filter-btn { padding:8px 14px; border-radius:20px; border:1px solid var(--line); background:var(--panel-soft); color:var(--text); cursor:pointer; font-weight:600; }
+    .filter-btn.active { background:var(--accent); color:#111; border-color:var(--accent); }
+    .deposit-admin-card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; display:grid; grid-template-columns:1fr auto; gap:16px; }
+    @media (max-width:800px){ .deposit-admin-card{ grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a href="/" class="brand"><i class="fa-solid fa-fire" style="color:var(--accent);margin-right:8px"></i>Escort<span>Hub</span> Admin</a>
+    <nav class="main-nav">
+      <a href="/#admin"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+      <a href="./admin_deposits.html" style="color:var(--accent);font-weight:800"><i class="fa-solid fa-coins"></i> Dépôts</a>
+      <a href="./user_deposit.html"><i class="fa-solid fa-wallet"></i> Mon wallet</a>
+    </nav>
+    <div class="header-actions">
+      <a href="/" class="btn-secondary"><i class="fa-solid fa-house"></i> Site</a>
+      <button id="logoutBtn" class="btn-secondary"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
+    </div>
+  </div>
+</header>
+
+<div id="toast-container" class="toast-container"></div>
+
+<main class="deposit-container">
+  <div class="deposit-header">
+    <h1><i class="fa-solid fa-shield-halved" style="color:var(--accent)"></i> Administration - Demandes de dépôt</h1>
+    <p>Valide les recharges Transcash. Crédit atomique sécurisé côté serveur via RPC.</p>
+  </div>
+
+  <div class="admin-filters">
+    <button class="filter-btn active" data-filter="pending"><i class="fa-solid fa-clock"></i> En attente</button>
+    <button class="filter-btn" data-filter="approved"><i class="fa-solid fa-check"></i> Approuvées</button>
+    <button class="filter-btn" data-filter="rejected"><i class="fa-solid fa-xmark"></i> Refusées</button>
+    <button class="filter-btn" data-filter="all"><i class="fa-solid fa-list"></i> Toutes</button>
+    <span id="countBadge" style="margin-left:auto;color:var(--muted);font-size:0.9rem"></span>
+  </div>
+
+  <div id="adminDepositList" class="history-list">
+    <p class="empty">Chargement des demandes...</p>
+  </div>
+</main>
+
+<!-- Modal refus -->
+<div id="rejectModal" class="modal hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;display:grid;place-items:center">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;max-width:480px;width:90%">
+    <h3><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger)"></i> Motif de refus</h3>
+    <p style="color:var(--muted);font-size:0.9rem">Indique pourquoi tu refuses cette demande. L'utilisateur sera informé.</p>
+    <textarea id="rejectReason" rows="4" placeholder="Ex: Preuve illisible, référence invalide, montant ne correspond pas..." style="width:100%;margin-top:12px;padding:12px;border-radius:10px;background:var(--panel-soft);border:1px solid var(--line);color:var(--text)"></textarea>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button id="cancelReject" class="btn-secondary" style="flex:1">Annuler</button>
+      <button id="confirmReject" class="btn-primary" style="flex:1;background:var(--danger);color:#fff"><i class="fa-solid fa-xmark"></i> Confirmer refus</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./admin_deposits.js"></script>
+</body>
+</html>
