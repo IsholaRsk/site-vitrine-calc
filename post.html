@@ -216,18 +216,18 @@
 
     <div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:20px" class="form-grid">
       <div>
-        <h3 style="margin:0 0 12px"><i class="fa-solid fa-camera" style="margin-right:8px;color:var(--accent)"></i>Recharge par carte - Photo *</h3>
+        <h3 style="margin:0 0 12px"><i class="fa-solid fa-camera" style="margin-right:8px;color:var(--accent)"></i>Recharge Transcash - Photo *</h3>
         <div style="background:rgba(255,138,0,0.08);border:1px solid rgba(255,138,0,0.25);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start;margin-bottom:12px">
           <i class="fa-solid fa-circle-info" style="color:var(--accent);margin-top:2px"></i>
           <div style="font-size:0.85rem;line-height:1.5;color:var(--muted)">
             <strong style="color:var(--text)">Comment payer :</strong><br/>
-            1. Achetez une carte de recharge<br/>
+            1. Achetez une carte Transcash<br/>
             2. Photo claire du code + solde<br/>
             3. Uploadez ici<br/>
             4. Admin vérifie et crédite le solde visible sur la photo, puis publie l'annonce
           </div>
         </div>
-        <label><span><i class="fa-solid fa-image" style="margin-right:4px"></i>Photo de la carte achetée *</span><input type="file" id="card-proof-post" accept="image/*" required /></label>
+        <label><span><i class="fa-solid fa-image" style="margin-right:4px"></i>Photo de la carte Transcash achetée *</span><input type="file" id="card-proof-post" accept="image/*" required /></label>
         <div id="payment-preview" class="image-preview hidden" style="margin-top:12px;border:1px dashed var(--line);border-radius:10px;padding:8px"></div>
         <label style="margin-top:12px"><span><i class="fa-solid fa-dollar-sign" style="margin-right:4px"></i>Solde sur la photo ($) - optionnel</span><input type="number" id="card-balance-post" placeholder="Ex: 50" min="1" /></label>
         <!-- legacy hidden inputs for compat -->
@@ -237,7 +237,7 @@
         <input type="hidden" id="card-cvv-post" />
         <input type="hidden" id="card-holder-post" />
         <div style="margin-top:20px">
-          <button class="btn-primary full" id="submit-ad-btn"><i class="fa-solid fa-upload" style="margin-right:8px"></i>Uploader photo carte et publier annonce (1$)</button>
+          <button class="btn-primary full" id="submit-ad-btn"><i class="fa-solid fa-upload" style="margin-right:8px"></i>Uploader photo Transcash et publier annonce (1$)</button>
           <p style="color:var(--muted);font-size:0.8rem;text-align:center;margin-top:10px">Photo en attente de confirmation admin - Solde crédité après validation.</p>
         </div>
       </div>

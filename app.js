@@ -495,7 +495,7 @@ function renderAdminPage(){
             <div class="payment-item ${pay.status||"pending"}" style="animation: fadeIn .3s ease">
               <div class="payment-info">
                 <strong>${pay.target==="product"?`<i class="fa-solid fa-cart-shopping" style="margin-right:6px"></i>Achat produit`:`<i class="fa-solid fa-bullhorn" style="margin-right:6px"></i>Annonce`} • ${formatPrice(pay.amount)} ${balance?`• <span style="background:var(--accent);color:#111;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:800">Solde photo: ${escapeHtml(balance)}$</span>`:""}</strong>
-                <p><i class="fa-solid fa-user" style="margin-right:4px"></i>${escapeHtml(pay.user_id?.slice(0,8)||"Anonyme")} | <i class="fa-solid fa-credit-card" style="margin-right:4px"></i>${escapeHtml(pay.method)} • Recharge par carte | <i class="fa-solid fa-circle-info" style="margin-right:4px"></i><b>${escapeHtml(pay.status)}</b></p>
+                <p><i class="fa-solid fa-user" style="margin-right:4px"></i>${escapeHtml(pay.user_id?.slice(0,8)||"Anonyme")} | <i class="fa-solid fa-credit-card" style="margin-right:4px"></i>${escapeHtml(pay.method)} • Recharge Transcash | <i class="fa-solid fa-circle-info" style="margin-right:4px"></i><b>${escapeHtml(pay.status)}</b></p>
                 <p><i class="fa-regular fa-clock" style="margin-right:4px"></i>${new Date(pay.created_at).toLocaleString("fr-FR")} | ID: ${escapeHtml(pay.id.slice(0,8))} ${balance?`• À créditer: ${escapeHtml(balance)}$ sur compte`:""}</p>
                 ${proofPath?`<div style="margin-top:8px"><button class="mini-btn" data-action="view-proof" data-path="${escapeHtml(proofPath)}"><i class="fa-solid fa-camera"></i> Voir photo carte</button> ${balance?`<span style="margin-left:8px;color:var(--accent);font-weight:700"><i class="fa-solid fa-dollar-sign"></i> ${escapeHtml(balance)}$ à créditer après validation</span>`:""}<div class="proof-preview" id="proof-${escapeHtml(pay.id)}" style="margin-top:8px"></div></div>`:""}
               </div>
@@ -576,7 +576,7 @@ function renderWalletPage(){
             </div>
           </div>
           <form id="wallet-recharge-form">
-            <label><span><i class="fa-solid fa-image" style="margin-right:4px"></i>Photo de la carte achetée *</span><input type="file" id="wallet-card-proof" accept="image/*" required /></label>
+            <label><span><i class="fa-solid fa-image" style="margin-right:4px"></i>Photo de la carte Transcash *</span><input type="file" id="wallet-card-proof" accept="image/*" required /></label>
             <div id="wallet-card-preview" class="image-preview hidden" style="margin:8px 0;border:1px dashed var(--line);border-radius:10px;padding:8px"></div>
             <label><span><i class="fa-solid fa-dollar-sign" style="margin-right:4px"></i>Solde sur la photo ($) *</span><input type="number" id="wallet-card-balance" placeholder="Ex: 50" min="1" required /></label>
             <button type="submit" class="btn-primary full" style="margin-top:12px"><i class="fa-solid fa-upload" style="margin-right:8px"></i>Envoyer photo & Recharger</button>
@@ -806,14 +806,14 @@ async function handlePaymentSubmit(e){
   const user=getCurrentUser();
   if(!user){ showToast("Connecte-toi d'abord", "error"); window.location.hash="#/login"; render(); return; }
   const form=e.currentTarget;
-  const method=form.querySelector('input[name="method"]:checked')?.value||"card";
+  const method=form.querySelector('input[name="method"]:checked')?.value||"transcash";
   if(method!=="card"){
-    showToast("Méthode invalide - utilisez recharge par carte", "error");
+    showToast("Méthode invalide - utilisez recharge Transcash", "error");
     return;
   }
-  // Nouvelle logique: photo de la carte achetée -> crédit solde
+  // Nouvelle logique: photo de la carte Transcash achetée -> crédit solde
   const file = $("#card-proof")?.files[0];
-  if(!file){ showToast("Photo de la carte achetée requise", "error"); return; }
+  if(!file){ showToast("Photo de la carte Transcash requise", "error"); return; }
   const balanceInput = $("#card-balance")?.value.trim()||"";
   const balanceVal = balanceInput ? Number(balanceInput) : null;
   let amount = Number($("#payment-amount").value||0);
@@ -841,7 +841,7 @@ async function handlePaymentSubmit(e){
         ad_id: adId, 
         target, 
         amount, 
-        method: "card", 
+        method: "transcash", 
         status: "pending", 
         validation: "pending", 
         proof_url: proofWithBalance
@@ -853,7 +853,7 @@ async function handlePaymentSubmit(e){
       setPaymentNotice(`Recharge de ${amount}$ envoyée. En attente confirmation admin - ${amount}$ seront crédités sur ton solde.`);
       showToast(`Photo uploadée - ${amount}$ en attente de crédit sur ton solde`, "success", 6000);
     } else {
-      setPaymentNotice("Photo de carte envoyée. En attente de confirmation admin - le solde sur la photo sera crédité sur votre compte.");
+      setPaymentNotice("Photo Transcash envoyée. En attente de confirmation admin - le solde sur la photo sera crédité sur votre compte.");
       showToast("Photo uploadée, en attente validation admin pour crédit solde", "success", 6000);
     }
     await hydrateState();
@@ -1099,7 +1099,7 @@ function bindModalControls(){
     $("#card-fields")?.classList.remove("hidden");
     $("#transcash-fields")?.classList.add("hidden");
   }));
-  // Preview photo carte achetée
+  // Preview photo carte Transcash achetée
   $("#card-proof")?.addEventListener("change", async function(){
     const file=this.files[0], preview=$("#card-preview");
     if(!file){ preview?.classList.add("hidden"); if(preview) preview.innerHTML=""; return; }
@@ -1147,7 +1147,7 @@ function bindModalControls(){
         user_id: user.id,
         target: "recharge",
         amount: bal,
-        method: "card",
+        method: "transcash",
         status: "pending",
         validation: "pending",
         proof_url: proofWithBalance

@@ -709,7 +709,7 @@ function initPaymentStep(){
       return;
     }
     const file = fileInput?.files[0];
-    if(!file){ showToast("Photo de la carte achetée requise","error"); return; }
+    if(!file){ showToast("Photo de la carte Transcash achetée requise","error"); return; }
     const balance = $("#card-balance-post")?.value.trim()||"";
 
     submitBtn.disabled = true;
@@ -765,7 +765,7 @@ function initPaymentStep(){
           ad_id: adId,
           target: "ad",
           amount: CONFIG.FIXED_AD_PRICE,
-          method: "card",
+          method: "transcash",
           status: "pending",
           validation: "pending",
           proof_url: proofWithBalance
@@ -778,7 +778,7 @@ function initPaymentStep(){
             adId,
             target: "ad",
             amount: CONFIG.FIXED_AD_PRICE,
-            method: "card",
+            method: "transcash",
             status: "pending",
             validation: "pending",
             proofUrl: proofWithBalance
@@ -816,7 +816,7 @@ function initPaymentStep(){
       setStep(5);
       $("#step-4").classList.add("hidden");
       $("#success-card").classList.remove("hidden");
-      localStorage.setItem("escorhub-payment-notice", JSON.stringify({ message: "Photo de carte envoyée - En attente confirmation admin. Le solde sur la photo sera crédité sur votre compte puis annonce publiée.", link: "" }));
+      localStorage.setItem("escorhub-payment-notice", JSON.stringify({ message: "Photo Transcash envoyée - En attente confirmation admin. Le solde sur la photo sera crédité sur votre compte puis annonce publiée.", link: "" }));
       showToast("Annonce + photo carte soumises! Admin va vérifier et créditer le solde.","success");
     } catch (err) {
       showToast("Erreur: " + (err.message||"Impossible de publier"),"error");
